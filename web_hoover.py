@@ -25,32 +25,35 @@ def getInnerURLs(content_file):
         return
 
 
-def create_nameFile(URL):
+def create_nameFile(URL,path):
     name_file = URL.split("/")[-1]
 
-    if (re.findall('[^"]+\.css|[^"]+\.js|[^"]+\.xss|[^"]+\.s?html', name_file, re.M)):
-        if(not os.path.exists("fichiers")):
-            os.mkdir("fichiers")
-        return "./fichiers/"+name_file
-    elif (re.findall('[^"]+\.gif|[^"]+\.jpg|[^"]+\.png|[^"]+\.ico', name_file, re.M)):
-        if(not os.path.exists("images")):
-            os.mkdir("images")
-        return "./images/"+name_file
+    if (re.findall(r'[^"]+\.css|[^"]+\.js|[^"]+\.xss|[^"]+\.s?html', name_file, re.M)):
+        path=os.path.join(path,"fichiers")            
+        if(not os.path.exists(path)):
+            os.mkdir(path)
+        
+    elif (re.findall(r'[^"]+\.gif|[^"]+\.jpg|[^"]+\.png|[^"]+\.ico', name_file, re.M)):
+        path=os.path.join(path,"images")
+        if(not os.path.exists(path)):
+            os.mkdir(path)
+        
     else:
-        if(not os.path.exists("other")):
-            os.mkdir("other")
-        return "./other/"+name_file
+        path=os.path.join(path,"other")
+        if(not os.path.exists(path)):
+            os.mkdir(path)
+        
+    return os.path.join(path,name_file)
 
 
 
-
-def download_file(URL):
+def download_file(URL,debug=False):
 
     connexionHTTP = None
 
     URL = URL.strip("//")
 
-    URL = "http://"+URL if not re.match("https:*|http:*", URL) else URL
+    URL = "http://"+URL if not re.match(r"https:*|http:*", URL) else URL
 
     try:
         with requests.get(URL, stream=True) as response:
@@ -69,9 +72,12 @@ def download_file(URL):
             return content
 
     except TimeoutError:
+        if(debug):
+            print("timeout , source : ",URL)
         return None
     except (ConnectionError, UnicodeError) as e:
-        print("\n error , source : ",URL)
+        if(debug):
+            print("\n error , source : ",URL)
         return None
         
 
@@ -85,16 +91,18 @@ def write_content(name_file, content):
 
 def parseArguments():
     parser=argparse.ArgumentParser(description="web downloader description")
-    parser.add_argument("--url",required=True,metavar='URL',help="your url")
+    parser.add_argument("--url",'-u',required=True,metavar='URL',help="your url")
+    parser.add_argument("--debug",'-d',help="show error message if any given url is invalid",action='store_true')
+    parser.add_argument("--output",'-o',default='.',help="output directory")
     return parser.parse_args()
 
 def main():
     #os.system('cls')
     args=parseArguments()
     name_root_file = "index.html"
-    
-    root_file_content = download_file(args.url)
-    
+    root_file_content = download_file(args.url,args.debug)
+    if(not os.path.exists(args.output)):
+        os.mkdir(args.output)    
     if root_file_content!=None:
         count=0
         URLS = getInnerURLs(root_file_content)
@@ -102,24 +110,22 @@ def main():
         print("found {} rescouces to download".format(total))
         for url in tqdm(URLS,total=total):
             #create new path for file 
-            name_file = create_nameFile(url)
+            name_file = create_nameFile(url,args.output)
             #download the file 
             resource_content = download_file(url)
             if resource_content !=None:
                 count += 1  
             #replace url with the new path 
-            root_file_content = re.sub(url, name_file, root_file_content.decode())
+            root_file_content = re.sub(url,re.escape(name_file), root_file_content.decode())
             #convert it to bytes
             root_file_content = bytes(root_file_content, encoding="utf-8")
             #write the content
             write_content(name_file, resource_content)
         #write the root file content (index.html)    
         write_content(name_root_file, root_file_content)
-        print(count)
         print(" {:2.2f} % resources successfully downloaded ".format(count/total*100))
     else :
         print("error , please check your url")    
-
 
 
 # https://www.eurosport.com/football/van-dijk-dismisses-talk-of-title-despite-reds-leading-the-way_sto7062094/story.shtml
